@@ -8,23 +8,34 @@ use std::{
     time::Duration,
 };
 
+use commons::MonitorConfiguration;
+
 use crate::worker::{
-    MonitorId, MonitorReport, MonitorWorker, WorkTimeThresholds, WorkTimer, WorkerError,
-    WorkerHandle,
+    HttpMonitorWorker, HttpsMonitorWorker, MonitorId, MonitorReport, MonitorWorker,
+    PingMonitorWorker, TcpMonitorWorker, UdpMonitorWorker, WorkTimeThresholds, WorkTimer,
+    WorkerError, WorkerHandle,
 };
 
+pub struct CacheEntry {
+    pub timer: WorkTimer,
+    pub thresholds: WorkTimeThresholds,
+    pub config: MonitorConfiguration,
+}
+
 pub struct WorkerExecutor {
+    cache: HashMap<MonitorId, CacheEntry>,
     workers: HashMap<MonitorId, WorkerHandle>,
 }
 
 impl WorkerExecutor {
     pub fn new() -> Self {
         Self {
+            cache: HashMap::new(),
             workers: HashMap::new(),
         }
     }
 
-    pub fn spawn_worker<TWorker: MonitorWorker>(
+    fn spawn_worker_inner<TWorker: MonitorWorker>(
         &mut self,
         id: MonitorId,
         timer: WorkTimer,
@@ -63,14 +74,73 @@ impl WorkerExecutor {
         self.workers.insert(id, handle);
     }
 
+    fn spawn_worker(
+        &mut self,
+        id: MonitorId,
+        timer: WorkTimer,
+        thresholds: WorkTimeThresholds,
+        config: MonitorConfiguration,
+    ) {
+        match config {
+            MonitorConfiguration::Ping(config) => {
+                self.spawn_worker_inner::<PingMonitorWorker>(id, timer, thresholds, config)
+            }
+            MonitorConfiguration::Http(config) => {
+                self.spawn_worker_inner::<HttpMonitorWorker>(id, timer, thresholds, config)
+            }
+            MonitorConfiguration::Https(config) => {
+                self.spawn_worker_inner::<HttpsMonitorWorker>(id, timer, thresholds, config)
+            }
+            MonitorConfiguration::Tcp(config) => {
+                self.spawn_worker_inner::<TcpMonitorWorker>(id, timer, thresholds, config)
+            }
+            MonitorConfiguration::Udp(config) => {
+                self.spawn_worker_inner::<UdpMonitorWorker>(id, timer, thresholds, config)
+            }
+        }
+    }
+
+    pub fn create_worker(
+        &mut self,
+        id: MonitorId,
+        timer: WorkTimer,
+        thresholds: WorkTimeThresholds,
+        config: MonitorConfiguration,
+    ) {
+        self.cache.insert(
+            id.clone(),
+            CacheEntry {
+                timer: timer.clone(),
+                thresholds: thresholds.clone(),
+                config: config.clone(),
+            },
+        );
+        self.spawn_worker(id, timer, thresholds, config);
+    }
+
+    pub fn pause_worker(&mut self, id: &MonitorId) {
+        self.kill_worker(id);
+    }
+
+    pub fn resume_worker(&mut self, id: &MonitorId) {
+        let Some(work_entry) = self.cache.get(id) else {
+            return;
+        };
+        self.spawn_worker(
+            id.clone(),
+            work_entry.timer.clone(),
+            work_entry.thresholds.clone(),
+            work_entry.config.clone(),
+        );
+    }
+
     pub fn kill_worker(&mut self, id: &MonitorId) {
+        self.cache.remove(id);
         let worker_handle = self.workers.remove(id);
         if let Some(worker_handle) = worker_handle {
             worker_handle.kill();
         }
     }
-
-    pub async fn run_once(&self) {}
 }
 
 fn save_report(worker_id: &MonitorId, report: MonitorReport) {

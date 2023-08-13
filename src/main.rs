@@ -1,13 +1,8 @@
-use std::{
-    collections::HashMap,
-    time::{SystemTime, UNIX_EPOCH},
-};
+use std::time::{SystemTime, UNIX_EPOCH};
 
-use commons::MonitorConfiguration;
 use executor::WorkerExecutor;
 use once_cell::sync::OnceCell;
 use serde::Deserialize;
-use worker::{MonitorId, WorkTimeThresholds, WorkTimer};
 use worker_server::WorkerServer;
 
 pub mod executor;
@@ -42,24 +37,6 @@ impl WorkerInformation {
     }
 }
 
-pub struct CacheEntry {
-    pub timer: WorkTimer,
-    pub thresholds: WorkTimeThresholds,
-    pub config: MonitorConfiguration,
-}
-
-pub struct WorkerCache {
-    pub entries: HashMap<MonitorId, CacheEntry>,
-}
-
-impl WorkerCache {
-    pub fn new() -> Self {
-        Self {
-            entries: HashMap::new(),
-        }
-    }
-}
-
 fn time_now() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -67,14 +44,18 @@ fn time_now() -> u64 {
         .as_secs()
 }
 
+async fn startup() {
+    WorkerInformation::initialize();
+}
+
 #[tokio::main]
 async fn main() {
     let pulsar_connection_string = "pulsar://127.0.0.1:6650";
 
-    let cache = WorkerCache::new();
+    startup().await;
+
     let executor = WorkerExecutor::new();
-    let mut server =
-        WorkerServer::new(cache, executor, pulsar_connection_string).await;
+    let mut server = WorkerServer::new(executor, pulsar_connection_string).await;
 
     server.run().await;
 }
