@@ -8,10 +8,13 @@ use std::{
     time::Duration,
 };
 
-use crate::worker::{MonitorWorker, WorkTimer, WorkerHandle, WorkerId, self, MonitorReport, WorkerError};
+use crate::worker::{
+    MonitorId, MonitorReport, MonitorWorker, WorkTimeThresholds, WorkTimer, WorkerError,
+    WorkerHandle,
+};
 
 pub struct WorkerExecutor {
-    workers: HashMap<WorkerId, WorkerHandle>,
+    workers: HashMap<MonitorId, WorkerHandle>,
 }
 
 impl WorkerExecutor {
@@ -23,29 +26,32 @@ impl WorkerExecutor {
 
     pub fn spawn_worker<TWorker: MonitorWorker>(
         &mut self,
-        id: WorkerId,
+        id: MonitorId,
         timer: WorkTimer,
+        thresholds: WorkTimeThresholds,
         config: TWorker::Config,
     ) {
         let running_arc = Arc::new(AtomicBool::new(true));
 
-        let worker_id = id.clone();
+        let monitor_id = id.clone();
         let running = running_arc.clone();
         let join = thread::spawn(move || {
-            let worker_id = worker_id;
+            let monitor_id = monitor_id;
             let mut timer = timer;
+            let thresholds = thresholds;
             let config = config;
 
             while running.load(Ordering::Relaxed) {
                 if timer.should_run() {
                     timer.save_execution();
 
-                    match TWorker::execute(&config) {
-                        Ok(report) => save_report(&worker_id, report),
-                        Err(error) => handle_error(&worker_id, error),
+                    match TWorker::execute(&config, &thresholds) {
+                        Ok(report) => save_report(&monitor_id, report),
+                        Err(error) => handle_error(&monitor_id, error),
                     }
                 }
 
+                // TODO: Maybe no should_run, but sleep period_secs
                 thread::sleep(Duration::from_millis(500));
             }
         });
@@ -57,7 +63,7 @@ impl WorkerExecutor {
         self.workers.insert(id, handle);
     }
 
-    pub fn kill_worker(&mut self, id: &WorkerId) {
+    pub fn kill_worker(&mut self, id: &MonitorId) {
         let worker_handle = self.workers.remove(id);
         if let Some(worker_handle) = worker_handle {
             worker_handle.kill();
@@ -67,10 +73,10 @@ impl WorkerExecutor {
     pub async fn run_once(&self) {}
 }
 
-fn save_report(worker_id: &WorkerId, report: MonitorReport) {
+fn save_report(worker_id: &MonitorId, report: MonitorReport) {
     println!("worker: {:?}, report: {:?}", worker_id, report);
 }
 
-fn handle_error(worker_id: &WorkerId, error: WorkerError) {
+fn handle_error(worker_id: &MonitorId, error: WorkerError) {
     println!("worker: {:?}, error: {:?}", worker_id, error);
 }

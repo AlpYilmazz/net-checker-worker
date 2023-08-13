@@ -1,16 +1,17 @@
 use std::{
     sync::{
         atomic::{AtomicBool, Ordering},
-        Arc, Mutex,
+        Arc,
     },
-    thread::{self, JoinHandle},
-    time::{Duration, SystemTime, UNIX_EPOCH},
+    thread::JoinHandle,
 };
 
 use commons::{
-    HttpMonitorConfiguration, HttpsMonitorConfiguration, PingMonitorConfiguration,
-    TcpMonitorConfiguration, UdpMonitorConfiguration, db::MonitorType,
+    db::MonitorType, HttpMonitorConfiguration, HttpsMonitorConfiguration, PingMonitorConfiguration,
+    TcpMonitorConfiguration, UdpMonitorConfiguration,
 };
+
+use crate::time_now;
 
 #[derive(Debug)]
 pub struct MonitorReport {
@@ -31,36 +32,36 @@ impl WorkTimer {
     pub fn new(period_secs: u32) -> Self {
         Self {
             period_secs,
-            last_execution: SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap()
-                .as_secs(),
+            last_execution: time_now(),
         }
     }
 
     pub fn should_run(&self) -> bool {
-        let now = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_secs();
+        let now = time_now();
         (now - self.last_execution) >= self.period_secs as u64
     }
 
     pub fn save_execution(&mut self) {
-        self.last_execution = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_secs();
+        self.last_execution = time_now();
     }
 }
 
+#[derive(Clone)]
+pub struct WorkTimeThresholds {
+    pub healthy: u32,
+    pub timeout: u32,
+}
+
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
-pub struct WorkerId(pub String);
+pub struct MonitorId(pub String);
 
 pub trait MonitorWorker {
     type Config: Send + Sync + 'static;
 
-    fn execute(config: &Self::Config) -> Result<MonitorReport, WorkerError>;
+    fn execute(
+        config: &Self::Config,
+        thresholds: &WorkTimeThresholds,
+    ) -> Result<MonitorReport, WorkerError>;
 }
 
 pub struct WorkerHandle {
@@ -79,10 +80,13 @@ pub struct PingMonitorWorker;
 impl MonitorWorker for PingMonitorWorker {
     type Config = PingMonitorConfiguration;
 
-    fn execute(config: &PingMonitorConfiguration) -> Result<MonitorReport, WorkerError> {
+    fn execute(
+        config: &PingMonitorConfiguration,
+        thresholds: &WorkTimeThresholds,
+    ) -> Result<MonitorReport, WorkerError> {
         Ok(MonitorReport {
             monitor_type: MonitorType::PING,
-            exec_time: SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs(),
+            exec_time: time_now(),
         })
     }
 }
@@ -91,10 +95,13 @@ pub struct HttpMonitorWorker;
 impl MonitorWorker for HttpMonitorWorker {
     type Config = HttpMonitorConfiguration;
 
-    fn execute(config: &HttpMonitorConfiguration) -> Result<MonitorReport, WorkerError> {
+    fn execute(
+        config: &HttpMonitorConfiguration,
+        thresholds: &WorkTimeThresholds,
+    ) -> Result<MonitorReport, WorkerError> {
         Ok(MonitorReport {
             monitor_type: MonitorType::HTTP,
-            exec_time: SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs(),
+            exec_time: time_now(),
         })
     }
 }
@@ -103,10 +110,13 @@ pub struct HttpsMonitorWorker;
 impl MonitorWorker for HttpsMonitorWorker {
     type Config = HttpsMonitorConfiguration;
 
-    fn execute(config: &HttpsMonitorConfiguration) -> Result<MonitorReport, WorkerError> {
+    fn execute(
+        config: &HttpsMonitorConfiguration,
+        thresholds: &WorkTimeThresholds,
+    ) -> Result<MonitorReport, WorkerError> {
         Ok(MonitorReport {
             monitor_type: MonitorType::HTTPS,
-            exec_time: SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs(),
+            exec_time: time_now(),
         })
     }
 }
@@ -115,10 +125,13 @@ pub struct TcpMonitorWorker;
 impl MonitorWorker for TcpMonitorWorker {
     type Config = TcpMonitorConfiguration;
 
-    fn execute(config: &TcpMonitorConfiguration) -> Result<MonitorReport, WorkerError> {
+    fn execute(
+        config: &TcpMonitorConfiguration,
+        thresholds: &WorkTimeThresholds,
+    ) -> Result<MonitorReport, WorkerError> {
         Ok(MonitorReport {
             monitor_type: MonitorType::TCP,
-            exec_time: SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs(),
+            exec_time: time_now(),
         })
     }
 }
@@ -127,10 +140,13 @@ pub struct UdpMonitorWorker;
 impl MonitorWorker for UdpMonitorWorker {
     type Config = UdpMonitorConfiguration;
 
-    fn execute(config: &UdpMonitorConfiguration) -> Result<MonitorReport, WorkerError> {
+    fn execute(
+        config: &UdpMonitorConfiguration,
+        thresholds: &WorkTimeThresholds,
+    ) -> Result<MonitorReport, WorkerError> {
         Ok(MonitorReport {
             monitor_type: MonitorType::UDP,
-            exec_time: SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs(),
+            exec_time: time_now(),
         })
     }
 }
