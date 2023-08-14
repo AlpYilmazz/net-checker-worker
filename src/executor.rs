@@ -11,9 +11,12 @@ use std::{
 use commons::MonitorConfiguration;
 
 use crate::worker::{
-    HttpMonitorWorker, HttpsMonitorWorker, MonitorId, MonitorReport, MonitorWorker,
-    PingMonitorWorker, TcpMonitorWorker, UdpMonitorWorker, WorkTimeThresholds, WorkTimer,
-    WorkerError, WorkerHandle,
+    http::{HttpMonitorWorker, HttpsMonitorWorker},
+    ping::PingMonitorWorker,
+    tcp::TcpMonitorWorker,
+    udp::UdpMonitorWorker,
+    MonitorId, MonitorReport, MonitorWorker, WorkTimeThresholds, WorkTimer, WorkerError,
+    WorkerHandle,
 };
 
 pub struct CacheEntry {

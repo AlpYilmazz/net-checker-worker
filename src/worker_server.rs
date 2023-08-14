@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use commons::message::{topic, MonitorMessage};
 use futures::TryStreamExt;
 use pulsar::{Consumer, DeserializeMessage, Pulsar, SubType, TokioExecutor};
@@ -58,6 +60,7 @@ impl WorkerServer {
                     println!("Error on try_next: {:?}", err1);
                 }
             }
+            tokio::time::sleep(Duration::from_secs(10)).await;
         }
     }
 

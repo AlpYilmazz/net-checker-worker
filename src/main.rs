@@ -44,18 +44,20 @@ fn time_now() -> u64 {
         .as_secs()
 }
 
-async fn startup() {
+async fn startup(_executor: &mut WorkerExecutor) {
     WorkerInformation::initialize();
 }
 
 #[tokio::main]
-async fn main() {
+async fn main() -> Result<(), ()> {
     let pulsar_connection_string = "pulsar://127.0.0.1:6650";
 
-    startup().await;
+    let mut executor = WorkerExecutor::new();
 
-    let executor = WorkerExecutor::new();
-    let mut server = WorkerServer::new(executor, pulsar_connection_string).await;
+    startup(&mut executor).await;
 
-    server.run().await;
+    let mut worker_server = WorkerServer::new(executor, pulsar_connection_string).await;
+    worker_server.run().await;
+
+    Ok(())
 }
